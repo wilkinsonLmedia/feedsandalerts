@@ -50,4 +50,4 @@ rsconnect/
 .positai
 
 #Creds
-email_creds
+.DS_Store
