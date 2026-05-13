@@ -8,10 +8,28 @@ This repository automates RSS feeds to customized email alerts.
 
 - code:
 
-  - 01-setting-up-RSS.R: code to pull RSS feeds and format it to be readable
+  - 01-setting-up-morning-RSS.R - code to pull RSS feeds and format it to be readable at 7am
 
-  - 02-automate-RSS-emails.R: using cron to automate emails
+  - 02-afternoon-RSS.R - code to pull RSS feeds and format it to be readable at 1pm
+
+  - 03-afternoon-RSS.R - code to pull RSS feeds and format it to be readable at 11:59pm
+
+  - 04-automate-RSS-emails.R - using cron to automate emails
 
 - docs:
 
-  - data-dictionary.qmd: daily log of changes made to this repo
+  - data-dictionary.qmd - daily log of changes made to this repo
+
+- data
+
+  - created
+
+    - fed_reg
+
+      - fedreg.csv - list of names and links to the federal register RSS feeds
+
+      - morning_register.rds - morning federal register
+
+      - afternoon_register.rds - afternoon federal register
+
+      - evening_register.rds - evening federal register
