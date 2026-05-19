@@ -43,3 +43,17 @@ This repository automates RSS feeds to customized email alerts.
       - afternoon_gao.rds - afternoon gao reports
 
       - evening_gao.rds - evening gao reports
+
+### INFO FOR CAFFEINATE
+
+# install screen if needed
+
+brew install screen
+
+# start a named session
+
+screen -S RSSfeeds
+
+#run caffeinate in screen
+
+caffeinate -ism Rscript /path/to/scheduler.R
