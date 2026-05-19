@@ -9,7 +9,7 @@ morning_fn <- function() {
   today <- as.Date(Sys.Date())
   
   #functions to get feeds, clean, and narrow down
-  make_lists <- function(name, link){
+  make_lists <- function(name, link, agency_filtering){
     
     ## helper function to make a md list instead of a table ##
     make_md_list <- function(df) {
@@ -23,17 +23,22 @@ morning_fn <- function() {
         pull(bullet) %>%
         paste(collapse = "\n") 
     }
-    #combine all bullets into one long string
-    result <- tidyfeed(link) %>% 
-      filter(item_pub_date >= today) %>% #only items published today
-      select(item_pub_date, feed_pub_date, item_title, item_link, item_description) %>% #just which columns I'm interested in
-      filter(str_detect(item_description, 
-                        regex("technology|website|artificial intelligence|computer|data|privacy|cyber|modernization|fedramp|onegov|online|network|cloud|digitization|USDS|DOGE|a\\.i\\.|u\\.s\\.d\\.s\\.|d\\.o\\.g\\.e\\.|\\btech\\b", 
-                              ignore_case = TRUE))) %>% #get only key words
-      ## SOPHIE ADD AGENCY FILTERING
-      make_md_list()
-    
-    return(result)
+    #combine all bullets into one long string and filter
+      df <- tidyfeed(link) %>%
+        filter(item_pub_date >= today) %>%
+        select(item_pub_date, feed_pub_date, item_title, item_link, item_description) %>%
+        filter(str_detect(item_description,
+                          regex("technology|website|artificial intelligence|computer|data|privacy|cyber|modernization|fedramp|onegov|online|network|cloud|digitization|USDS|DOGE|a\\.i\\.|u\\.s\\.d\\.s\\.|d\\.o\\.g\\.e\\.|\\btech\\b",
+                                ignore_case = TRUE)))
+      
+      if (agency_filtering == TRUE) {
+        df <- df %>%
+          filter(str_detect(item_description,  # add agencies to filter
+                            regex("general services administration|environmental protection agency|interior department|department of the interior|veterans affairs|department of education|education department|agriculture department|department of agriculture|postal service|patent and trademark office|national archives", ignore_case = TRUE)))
+      }
+      
+      df %>% make_md_list()
+      
   }
   
   #### FEDERAL REGISTER ####
@@ -42,10 +47,10 @@ morning_fn <- function() {
   
   
   #run function and set names 
-  registers_results <- map2(registers$name, registers$link, make_lists) %>%
+  registers_results <- map2(registers$name, registers$link, ~make_lists(.x, .y, agency_filtering = FALSE)) %>%
     setNames(registers$name)
   
-    #write that
+  #write that
   write_rds(registers_results, "/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/fedreg/morning_register.rds")
   
   #put them each into the environment
@@ -58,7 +63,7 @@ morning_fn <- function() {
   gao <- read.csv("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/gao/gao.csv")
   
   #run function and set names 
-  gao_results <- map2(gao$name, gao$link, make_lists) %>%
+  gao_results <- map2(gao$name, gao$link, ~make_lists(.x, .y, agency_filtering = TRUE)) %>%
     setNames(gao$name)
   
   #write that
@@ -66,21 +71,6 @@ morning_fn <- function() {
   
   #put them each into the environment
   list2env(gao_results, envir = .GlobalEnv)
-  
-  
-  #### GRANTS ####
-  
-  
-  
-  
-  #### USASPENDING ####
-  
-  
-  
-  
-  #### COURTLISTENER ####
-  
-  
   
   ###### set up email #####
   email <- compose_email(
@@ -124,6 +114,9 @@ morning_fn <- function() {
       ## 🏛️ Archives 🏛
       {nara_fed_register}
       
+      ## 🔬 Patents & Trademarks 🔬
+      {uspto_fed_register}
+      
       -----
       # _📜GAO:📜_
       
@@ -141,15 +134,6 @@ morning_fn <- function() {
       
       ## Blog
       {gao_blog}
-      
-      -----
-      # _📜GRANTS:📜_
-      
-      -----
-      # _📜USA SPENDING:📜_
-      
-      -----
-      # _📜COURTS:📜_
       
       -----
       _This is an automated message sent at 7:00 a.m. {today} from KSW's Work Laptop_"

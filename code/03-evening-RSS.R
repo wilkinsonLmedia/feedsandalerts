@@ -1,12 +1,15 @@
 library(pacman)
 p_load(tidyverse, magrittr, tidyRSS, blastula, knitr)
 
+#set wd to fix connection error
+setwd("/Users/sophiewill/Documents/data_projects/feedsandalerts")
+
 evening_fn <- function() {
   #set today
   today <- as.Date(Sys.Date())
-  
-  #### function to get registers and clean ####
-  make_register_lists <- function(name, link){
+
+  #functions to get feeds, clean, and narrow down
+  make_lists <- function(name, link, agency_filtering){
     
     ## helper function to make a md list instead of a table ##
     make_md_list <- function(df) {
@@ -20,49 +23,53 @@ evening_fn <- function() {
         pull(bullet) %>%
         paste(collapse = "\n") 
     }
-      #cmbine all bullets into one long string
-    result <- tidyfeed(link) %>% 
-      filter(feed_pub_date >= today | item_pub_date >= today) %>% #only items posted or put in the feed today
-      select(item_pub_date, feed_pub_date, item_title, item_link, item_description) %>% #just which columns I'm interested in
-      filter(str_detect(item_description, 
-                        regex("technology|website|artificial intelligence|computer|data|database|privacy|cyber|modernization|fedramp|onegov|online|network|cloud|digitization|USDS|DOGE|a\\.i\\.|u\\.s\\.d\\.s\\.|d\\.o\\.g\\.e\\.|\\btech\\b", 
-                              ignore_case = TRUE))) %>% #get only key words
-      make_md_list()
+    #combine all bullets into one long string and filter
+    df <- tidyfeed(link) %>%
+      filter(item_pub_date >= today) %>%
+      select(item_pub_date, feed_pub_date, item_title, item_link, item_description) %>%
+      filter(str_detect(item_description,
+                        regex("technology|website|artificial intelligence|computer|data|privacy|cyber|modernization|fedramp|onegov|online|network|cloud|digitization|USDS|DOGE|a\\.i\\.|u\\.s\\.d\\.s\\.|d\\.o\\.g\\.e\\.|\\btech\\b",
+                              ignore_case = TRUE)))
     
-    return(result)
+    if (agency_filtering == TRUE) {
+      df <- df %>%
+        filter(str_detect(item_description,  # add agencies to filter
+                          regex("general services administration|environmental protection agency|interior department|department of the interior|veterans affairs|department of education|education department|agriculture department|department of agriculture|postal service|patent and trademark office|national archives", ignore_case = TRUE)))
+    }
+    
+    df %>% make_md_list()
+    
   }
   
-  #read in registers 
-  registers <- read.csv("./data/created/fedreg/fedreg.csv")
+  #### FEDERAL REGISTER ####
+  #read in registers
+  registers <- read.csv("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/fedreg/fedreg.csv")
   
-  #run function and set names 
-  result_list <- map2(registers$name, registers$link, make_register_lists) %>%
+  #run function and set names
+  registers_results <- map2(registers$name, registers$link, ~make_lists(.x, .y, agency_filtering = FALSE)) %>%
     setNames(registers$name)
   
-    #write that
-    write_rds(result_list, "./data/created/fedreg/evening_register.rds")
+  #write that
+  write_rds(registers_results, "/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/fedreg/evening_register.rds")
   
-  #compare what was just got with what was gotten this morning and afternoon
-  morning <- read_rds("./data/created/fedreg/morning_register.rds") 
-  afternoon <- read_rds("./data/created/fedreg/afternoon_register.rds") 
+  #compare with morning and afternoon
+  morning_registers   <- read_rds("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/fedreg/morning_register.rds")
+  afternoon_registers <- read_rds("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/fedreg/afternoon_register.rds")
   
   #### filter out what was already sent this morning and afternoon ####
-  result_list_updated <- imap(result_list, function(evening_str, register_name) {
+  registers_results <- imap(registers_results, function(evening_str, register_name) {
     
     if (evening_str == "_No updates for today._") return(evening_str)
     
-    morning_str   <- morning[[register_name]]
-    afternoon_str <- afternoon[[register_name]]
+    morning_str   <- morning_registers[[register_name]]
+    afternoon_str <- afternoon_registers[[register_name]]
     
-    # split all three into individual bullets
     evening_bullets   <- str_split(evening_str,   "\n(?=\\*)")[[1]]
     morning_bullets   <- str_split(morning_str,   "\n(?=\\*)")[[1]]
     afternoon_bullets <- str_split(afternoon_str, "\n(?=\\*)")[[1]]
     
-    # combine prior sends into one vector to compare
     already_sent <- c(morning_bullets, afternoon_bullets)
-    
-    new_bullets <- evening_bullets[!evening_bullets %in% already_sent]
+    new_bullets  <- evening_bullets[!evening_bullets %in% already_sent]
     
     if (length(new_bullets) == 0) return("_No updates for today._")
     
@@ -70,43 +77,110 @@ evening_fn <- function() {
   })
   
   #put them each into the environment
-  list2env(result_list_updated, envir = .GlobalEnv)
+  list2env(registers_results, envir = .GlobalEnv)
+  
+  
+  #### GAO ####
+  #read in gao
+  gao <- read.csv("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/gao/gao.csv")
+  
+  #run function and set names
+  gao_results <- map2(gao$name, gao$link, ~make_lists(.x, .y, agency_filtering = TRUE)) %>%
+    setNames(gao$name)
+  
+  #write that
+  write_rds(gao_results, "/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/gao/evening_gao.rds")
+  
+  #compare with morning and afternoon gao
+  morning_gao   <- read_rds("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/gao/morning_gao.rds")
+  afternoon_gao <- read_rds("/Users/sophiewill/Documents/data_projects/feedsandalerts/data/created/gao/afternoon_gao.rds")
+  
+  #### filter out what was already sent this morning and afternoon ####
+  gao_results <- imap(gao_results, function(evening_str, gao_name) {
+    
+    if (evening_str == "_No updates for today._") return(evening_str)
+    
+    morning_str   <- morning_gao[[gao_name]]
+    afternoon_str <- afternoon_gao[[gao_name]]
+    
+    evening_bullets   <- str_split(evening_str,   "\n(?=\\*)")[[1]]
+    morning_bullets   <- str_split(morning_str,   "\n(?=\\*)")[[1]]
+    afternoon_bullets <- str_split(afternoon_str, "\n(?=\\*)")[[1]]
+    
+    already_sent <- c(morning_bullets, afternoon_bullets)
+    new_bullets  <- evening_bullets[!evening_bullets %in% already_sent]
+    
+    if (length(new_bullets) == 0) return("_No updates for today._")
+    
+    paste(new_bullets, collapse = "\n")
+  })
+  
+  #put them each into the environment
+  list2env(gao_results, envir = .GlobalEnv)
   
   ###### set up email #####
   email <- compose_email(
     body = md(glue::glue(
-      "# **🌙 Evening Federal Register updates for {today} 🌙**:
-      
-      ## 🏢 GSA
+      "# **🌙 Evening RSS Feeds for {today} 🌙**:
+
+      -----
+
+      # _📜FEDERAL REGISTER:📜_
+
+      ## 🏢 GSA 🏢
       {gsa_fed_register}
-      
-      ## ⚖️ Justice
-      {justice_fed_register}
-      
-      ### ⚖️ Justice significant docs
-      {justice_sig_fed_register}
-      
-      ## 📚 Education
+
+      ## 🌾 Agriculture 🌾
+      {ag_fed_register}
+
+      ### 🌾 Agriculture significant docs 🌾
+      {ag_sig_fed_register}
+
+      ## 📚 Education 📚
       {edu_fed_register}
-      
-      ## 🪖 VA
+
+      ## 🪖 VA 🪖
       {va_fed_register}
-      
-      ## 👵 SSA
-      {ssa_fed_register}
-      
-      ## 🌎 EPA
+
+      ## 🌎 EPA 🌎
       {epa_fed_register}
-      
-      ### 🌎 EPA significant docs
+
+      ### 🌎 EPA significant docs 🌎
       {epa_sig_fed_register}
-      
-      ## 🏜️ Interior
+
+      ## 🏜️ Interior 🏜
       {interior_fed_register}
-      
-      ### 🏜️ Interior significant docs
+
+      ### 🏜️ Interior significant docs 🏜
       {interior_sig_fed_register}
+
+      ## 💌 USPS 💌
+      {usps_fed_register}
+
+      ## 🏛️ Archives 🏛
+      {nara_fed_register}
       
+      ## 🔬 Patents & Trademarks 🔬
+      {uspto_fed_register}
+
+      -----
+      # _📜GAO:📜_
+
+      ## Reports
+      {gao_reports}
+
+      ## Legal
+      {gao_legal}
+
+      ## Legal Rules
+      {gao_legal_rules}
+
+      ## Press releases
+      {gao_press}
+
+      ## Blog
+      {gao_blog}
+
       -----
       _This is an automated message sent at 11:59 p.m. {today} from KSW's Work Laptop_"
     ))
@@ -118,14 +192,16 @@ evening_fn <- function() {
   smtp_password <- Sys.getenv("SMTP_PASSWORD")
   
   # #send email
-  email %>%  smtp_send(
+  email %>% smtp_send(
     to = "sophie.will@fedscoop.com",
     from = "ksophiewill@gmail.com",
-    subject = "Evening Fed Register Updates",
+    subject = "🌙 Evening RSS Updates 🌙",
     credentials = creds_envvar(
       user = "ksophiewill@gmail.com",
       pass_envvar = "SMTP_PASSWORD",
       provider = "gmail"
     )
   )
+  
+  message("[", Sys.time(), "] Evening email sent successfully")
 }
